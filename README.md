@@ -1,4 +1,4 @@
-# Check signed commits in PR
+# Check conflict branch in PR
 
 A GitHub Action that checks the Pull Request with conflict branch, labeling custom conflict and also places a comment in the PR to inform the author about next steps.
 
@@ -28,6 +28,10 @@ jobs:
           label: Conflicts
 ```
 
+For note: `The shortest interval you can run scheduled workflows is once every 5 minutes.`
+
+See https://docs.github.com/en/actions/using-workflows/events-that-trigger-workflows#schedule
+
 ## Change PR Comment
 
 The comment that will be placed in the PR upon detecting conflict branch can be changed using the `comment` field:
@@ -40,6 +44,8 @@ The comment that will be placed in the PR upon detecting conflict branch can be 
       Customized comment in the PR
 ```
 
+If you need tagged the author, you can use `authorTarget` magic get author in PR
+
 ## Change PR Label
 
 The comment that will be placed in the PR upon detecting conflict branch can be changed using the `comment` field:
@@ -49,4 +55,15 @@ The comment that will be placed in the PR upon detecting conflict branch can be 
   uses: PHPDevsr/check-conflict-action@v1
   with:
     label: CustomizedLabel
+```
+
+## Change list limit PR
+
+When job schedule running, detecting by default `100` last PR.
+
+```yml
+- name: Check conflict branch in PR
+  uses: PHPDevsr/check-conflict-action@v1
+  with:
+    limit: 200
 ```

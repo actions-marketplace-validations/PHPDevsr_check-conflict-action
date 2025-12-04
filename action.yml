@@ -12,10 +12,13 @@ inputs:
     description: GitHub label conflict to labeling on the PR
     default: conflict
     required: true
+  limit:
+    description: Limitable Pull Request List
+    default: 100
   comment:
     description: The comment to place in the PR
     default: |
-      :wave: Hi, @$author!
+      :wave: Hi, @authorTarget!
 
       We detected conflicts in your PR against the base branch :speak_no_evil:
       You may want to sync :arrows_counterclockwise: your branch with upstream!
@@ -29,12 +32,10 @@ runs:
       env:
         GITHUB_TOKEN: ${{ inputs.token }}
         LABEL_GIT: ${{ inputs.label }}
+        LIMIT_GIT: ${{ inputs.limit }}
         COMMENT_TEXT: ${{ inputs.comment }}
       run: |
-        PR_LIST=$(gh pr list -L 100 --json mergeable,url,labels,author)
-
-        # Escape double quotes and newlines
-        LABEL_GIT="$(echo "$LABEL_GIT" | sed 's/"/\\"/g' | awk '{printf "%s\\n", $0}')"
+        PR_LIST=$(gh pr list -L $LIMIT_GIT --json mergeable,url,labels,number,author)
 
         # Escape double quotes and newlines
         COMMENT_TEXT="$(echo "$COMMENT_TEXT" | sed 's/"/\\"/g' | awk '{printf "%s\\n", $0}')"
@@ -44,41 +45,51 @@ runs:
         # Iterate through the PRs in PR_LIST
         for pr in $(echo "$PR_LIST" | jq -c '.[]'); do
           mergeable=$(echo "$pr" | jq -r '.mergeable')
-          author=$(echo "$pr" | jq -r '.user.login') # Menggunakan .user.login untuk mendapatkan nama pengguna pembuat PR
+          authorVar=$(echo "$pr" | jq -r '.author.login')
           labels=$(echo "$pr" | jq -c '.labels[].name' | tr -d '[]"')
           PR_NUMBER=$(echo "$pr" | jq -r '.number')
           url=$(echo "$pr" | jq -r '.url')
-          html_url=$(echo "$pr" | jq -r '.html_url')
 
           echo "$pr"
           echo "[+] Repository on $GITHUB_REPOSITORY"
           echo "[+] PR Number on $PR_NUMBER"
           echo "[+] Status mergeable : $mergeable"
           echo "[+] Status label : $labels"
-          echo "[+] URL on $html_url"
+          echo "[+] Labeling Target on $LABEL_GIT"
+          echo "[+] Author Target on $authorVar"
+          echo ""
 
           # MERGEABLE with label
-          if [ "$mergeable" == "true" ] && [[ ! "$labels" == "$LABEL_GIT" ]]; then
+          if [ "$mergeable" == "MERGEABLE" ] && [[ "$labels" == *"$LABEL_GIT"* ]]; then
             # Remove label
-            responseRemoveWithLabel=$(curl -X DELETE -H "Authorization: token $GITHUB_TOKEN" \
+            responseRemoveWithLabel=$(curl -X DELETE -H "Accept: application/vnd.github+json" \
+              -H "Authorization: Bearer $GITHUB_TOKEN" \
+              -H "X-GitHub-Api-Version: 2022-11-28" \
               "https://api.github.com/repos/$GITHUB_REPOSITORY/issues/$PR_NUMBER/labels/$LABEL_GIT")
 
             echo "$responseRemoveWithLabel"
           fi
 
           # CONFLICTING with no label
-          if [ "$mergeable" == "false" ] && [[ ! "$labels" == *"$LABEL_GIT"* ]]; then
+          if [ "$mergeable" == "CONFLICTING" ] && [[ ! "$labels" == *"$LABEL_GIT"* ]]; then
+            # Replace author
+            COMMENT_TEXT="$(echo $COMMENT_TEXT | sed -e "s/authorTarget/${authorVar}/g")"
+
+            echo -e "$COMMENT_TEXT"
+
             # Add label
-            responseAddNoLabel=$(curl -X POST -H "Authorization: token $GITHUB_TOKEN" \
-              -H "Accept: application/vnd.github.v3+json" \
+            responseAddNoLabel=$(curl -X POST -H "Authorization: Bearer $GITHUB_TOKEN" \
+              -H "Accept: application/vnd.github+json" \
+              -H "X-GitHub-Api-Version: 2022-11-28" \
               -d "{\"labels\":[\"$LABEL_GIT\"]}" \
               "https://api.github.com/repos/$GITHUB_REPOSITORY/issues/$PR_NUMBER/labels")
 
             echo "$responseAddNoLabel"
 
             # Add a comment
-            responseCommentAddNoLabel=$(curl -X POST -H "Authorization: token $GITHUB_TOKEN" \
-              -H "Accept: application/vnd.github.v3+json" \
+            responseCommentAddNoLabel=$(curl -X POST -H "Authorization: Bearer $GITHUB_TOKEN" \
+              -H "Accept: application/vnd.github+json" \
+              -H "X-GitHub-Api-Version: 2022-11-28" \
               -d "{\"body\":\"$COMMENT_TEXT\"}" \
               "https://api.github.com/repos/$GITHUB_REPOSITORY/issues/$PR_NUMBER/comments")
 
